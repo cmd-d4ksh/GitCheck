@@ -1,3 +1,13 @@
+# macOS system files
+.DS_Store
+**/.DS_Store
+
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
 .env
 __pycache__/
 *.pyc
