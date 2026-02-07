@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 venv/
 .idea/
+# macOS system files
+.DS_Store
+**/.DS_Store
+
