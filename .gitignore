@@ -1,19 +1,31 @@
-# macOS system files
-.DS_Store
-**/.DS_Store
-
 # Environment variables
 .env
+.env.*
+!.env.example
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
-.env
-__pycache__/
-*.pyc
+*.pyo
+*.pyd
+*.log
+.venv/
 venv/
-.idea/
-# macOS system files
-.DS_Store
-**/.DS_Store
+env/
 
+# Django
+db.sqlite3
+staticfiles/
+
+# Node (if you ever use it)
+node_modules/
+
+# macOS junk
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# OS / misc
+Thumbs.db
