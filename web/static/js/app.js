@@ -1,528 +1,487 @@
-const form = document.getElementById("analyze-form");
-const repoInput = document.getElementById("repo-url");
-const statusEl = document.getElementById("form-status");
-const compareInput = document.getElementById("repo-compare");
-const meterValue = document.getElementById("meter-value");
-const meterLabel = document.getElementById("meter-label");
-const meterRing = document.querySelector(".meter-ring");
-const repoName = document.getElementById("repo-name");
-const recommendation = document.getElementById("recommendation");
-const signals = document.getElementById("signals");
-const warnings = document.getElementById("warnings");
-const compareGrid = document.getElementById("compare-grid");
-const compareTable = document.getElementById("compare-table");
-const compareSection = document.getElementById("compare");
-const summaryBoard = document.getElementById("summary-board");
-const dashboardSection = document.getElementById("dashboard");
-const timelineSection = document.getElementById("timeline");
-const explainSection = document.getElementById("explain");
-const compareTableSection = document.getElementById("compare-table-section");
-const watchlistSection = document.getElementById("watchlist");
-const watchlistGrid = document.getElementById("watchlist-grid");
-const watchlistSave = document.getElementById("watchlist-save");
-const watchlistRefresh = document.getElementById("watchlist-refresh");
-const shareReport = document.getElementById("share-report");
-const weightsEl = document.getElementById("weights");
-const thresholdsEl = document.getElementById("thresholds");
-const contributionsEl = document.getElementById("contributions");
-const timelineBars = document.getElementById("timeline-bars");
-const timelineNote = document.getElementById("timeline-note");
-const dashStars = document.getElementById("dash-stars");
-const dashForks = document.getElementById("dash-forks");
-const dashContrib = document.getElementById("dash-contrib");
-const dashIssues = document.getElementById("dash-issues");
-const dashCommits = document.getElementById("dash-commits");
-const dashCloseRate = document.getElementById("dash-close-rate");
-const dashIssuesBar = document.getElementById("dash-issues-bar");
-const dashCommitsSpark = document.getElementById("dash-commits-spark");
-const dashSecurity = document.getElementById("dash-security");
-const dashLicense = document.getElementById("dash-license");
-const grid = document.querySelector(".bg-grid");
-const summaryDecision = document.getElementById("summary-decision");
-const summaryRisk = document.getElementById("summary-risk");
-const summaryMeta = document.getElementById("summary-meta");
-const summaryHighlights = document.getElementById("summary-highlights");
-const summaryRisks = document.getElementById("summary-risks");
+/* GitCheck frontend. */
 
-const clampTo99 = (value) => Math.max(0, Math.min(99, Math.round(value)));
-const formatPercent = (value) => (value === 0 ? "0%" : value ? `${Math.round(value * 100)}%` : "—");
-const joinLines = (items) => items.filter(Boolean).join("\n");
-const WATCHLIST_KEY = "gitcheck_watchlist";
-const HISTORY_KEY = "gitcheck_history";
+const $ = (id) => document.getElementById(id);
+const form = $("analyze-form");
+const repoInput = $("repo-url");
+const compareInput = $("repo-compare");
+const analyzeBtn = $("analyze-btn");
+const formStatus = $("form-status");
+const toast = $("toast");
 
-const getWatchlist = () => {
-  try {
-    return JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]");
-  } catch {
-    return [];
+const report = $("report");
+const compareSection = $("compare-section");
+
+const RING_CIRC = 2 * Math.PI * 50;
+
+const RISK_COLORS = {
+  Low: "#22e37a",
+  Medium: "#ffb84a",
+  High: "#ff6b87",
+};
+
+const STATUS_EMOJI = {
+  Thriving: "🚀",
+  Active: "✅",
+  Moderate: "🟡",
+  Risky: "⚠️",
+  Stale: "🕸",
+  Abandoned: "🪦",
+  Archived: "📦",
+  Empty: "∅",
+  Unknown: "❓",
+};
+
+const fmtNumber = (n) => {
+  if (n === null || n === undefined) return "—";
+  if (typeof n !== "number") return String(n);
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
+  return n.toLocaleString();
+};
+
+const fmtPercent = (v) => (v === null || v === undefined) ? "—" : `${Math.round(v * 100)}%`;
+
+const fmtDaysAgo = (days) => {
+  if (days === null || days === undefined) return "—";
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  const y = (days / 365).toFixed(1).replace(/\.0$/, "");
+  return `${y}y ago`;
+};
+
+const riskClass = (risk) =>
+  risk === "Low" ? "good" : risk === "Medium" ? "warn" : risk === "High" ? "bad" : "";
+
+const setRiskTheme = (risk) => {
+  const color = RISK_COLORS[risk] || "#7c5cff";
+  document.documentElement.style.setProperty("--risk-color", color);
+};
+
+const showToast = (message, isError = true) => {
+  toast.textContent = message;
+  toast.style.borderColor = isError ? "var(--bad)" : "var(--good)";
+  toast.classList.add("show");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove("show"), 4500);
+};
+
+const setLoading = (loading) => {
+  analyzeBtn.disabled = loading;
+  analyzeBtn.classList.toggle("loading", loading);
+};
+
+const parseRepoInput = (value) => {
+  if (!value) return null;
+  return value.trim();
+};
+
+const parseCompareList = (raw) => {
+  if (!raw || !raw.trim()) return [];
+  return raw
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+};
+
+const fetchAnalysis = async (repoUrl) => {
+  const res = await fetch(`/api/analyze?repo_url=${encodeURIComponent(repoUrl)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `Request failed (${res.status})`);
   }
+  return data;
 };
 
-const setWatchlist = (list) => {
-  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list));
+const renderSingle = (data) => {
+  report.classList.remove("hidden");
+
+  const score = Math.max(0, Math.min(100, Math.round(data.score || 0)));
+  const risk = data.risk_level || "Unknown";
+  const status = data.status || "Unknown";
+  setRiskTheme(risk);
+
+  const ring = $("ring-fg");
+  ring.setAttribute("stroke-dasharray", String(RING_CIRC));
+  ring.setAttribute("stroke-dashoffset", String(RING_CIRC * (1 - score / 100)));
+
+  animateNumber($("score-value"), score, { suffix: "" });
+  $("score-sub").textContent = "out of 100";
+
+  const pillStatus = $("pill-status");
+  pillStatus.textContent = `${STATUS_EMOJI[status] || ""} ${status}`.trim();
+  pillStatus.className = `pill ${riskClass(risk)}`;
+
+  const pillRisk = $("pill-risk");
+  pillRisk.textContent = `${risk} risk`;
+  pillRisk.className = `pill ${riskClass(risk)}`;
+
+  const avatar = $("repo-avatar");
+  avatar.textContent = (data.repository || "?")[0].toUpperCase();
+
+  $("repo-name").textContent = data.repository || "—";
+  $("repo-desc").textContent = data.description || "No description provided.";
+
+  const metaBits = [];
+  if (data.language) metaBits.push(data.language);
+  if (data.license) metaBits.push(data.license);
+  if (data.latest_release) metaBits.push(`Latest: ${data.latest_release}`);
+  if (data.metadata?.age_days) metaBits.push(`Created ${fmtDaysAgo(data.metadata.age_days)}`);
+  const metaEl = $("repo-meta");
+  metaEl.innerHTML = metaBits.length
+    ? metaBits.map((b) => `<span class="meta-chip">${escapeHtml(b)}</span>`).join("")
+    : '<span class="meta-chip">—</span>';
+
+  const callout = $("report-callout");
+  callout.style.borderLeftColor = RISK_COLORS[risk] || "var(--risk-color)";
+  $("callout-icon").textContent = STATUS_EMOJI[status] || "★";
+  $("callout-title").textContent = status;
+  $("callout-body").textContent = data.recommendation || "—";
+
+  const m = data.metadata || {};
+  const a = data.activity || {};
+  setKpi("kpi-stars", fmtNumber(m.stars));
+  setKpi("kpi-forks", fmtNumber(m.forks));
+  setKpi("kpi-contrib", fmtNumber(m.contributors));
+  setKpi("kpi-issues", fmtNumber(m.open_issues));
+  setKpi("kpi-commits", fmtNumber(a.commits_last_90_days));
+  setKpi("kpi-close-rate", fmtPercent(a.issue_close_rate));
+  setKpi("kpi-pr-rate", fmtPercent(a.pr_merge_rate));
+  setKpi("kpi-last-push", fmtDaysAgo(m.days_since_push));
+
+  renderList("highlights-list", data.highlights, "No notable positives detected.");
+  renderList("risks-list", data.risks, "No major risks detected.");
+  renderChart(a.weekly_commits);
+  renderBreakdown(data.breakdown || []);
+  renderCategories(data.categories || []);
+  renderContributors(data.top_contributors || []);
+
+  scrollTo({ top: report.offsetTop - 60, behavior: "smooth" });
 };
 
-const getHistory = () => {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}");
-  } catch {
-    return {};
-  }
+const setKpi = (id, value) => {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = value ?? "—";
 };
 
-const setHistory = (history) => {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+const animateNumber = (el, target, opts = {}) => {
+  const duration = 700;
+  const start = 0;
+  const t0 = performance.now();
+  const suffix = opts.suffix ?? "";
+  const tick = (now) => {
+    const t = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const v = Math.round(start + (target - start) * eased);
+    el.textContent = `${v}${suffix}`;
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 };
 
-const updateHistory = (repo, score) => {
-  const history = getHistory();
-  const list = history[repo] || [];
-  list.push({ ts: Date.now(), score });
-  history[repo] = list.slice(-12);
-  setHistory(history);
-};
-
-const renderWatchlist = () => {
-  const list = getWatchlist();
-  const history = getHistory();
-  if (!list.length) {
-    watchlistGrid.innerHTML = "<div class=\"summary-value\">No saved repos yet.</div>";
+const renderList = (id, items, emptyMessage) => {
+  const el = $(id);
+  if (!items || items.length === 0) {
+    el.innerHTML = `<li class="empty">${escapeHtml(emptyMessage)}</li>`;
     return;
   }
+  el.innerHTML = items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+};
 
-  watchlistGrid.innerHTML = list
-    .map((item) => {
-      const entries = history[item.repo] || [];
-      const last = entries[entries.length - 1];
-      const score = last ? `${clampTo99(last.score)}%` : "—";
-      const sparkMax = Math.max(...entries.map((e) => e.score || 0), 1);
-      const spark = entries
-        .map((e) => {
-          const height = Math.max(6, Math.round(((e.score || 0) / sparkMax) * 100));
-          return `<div class="spark-bar" style="height:${height}%;"></div>`;
-        })
-        .join("");
+const renderChart = (weekly) => {
+  const el = $("commit-chart");
+  const note = $("chart-note");
+  if (!Array.isArray(weekly) || weekly.length === 0) {
+    el.innerHTML = "";
+    note.textContent = "Timeline unavailable for this repo.";
+    return;
+  }
+  const totals = weekly.map((w) => w.total || 0);
+  const max = Math.max(...totals, 1);
+  const peak = totals.indexOf(max);
+  el.innerHTML = totals
+    .map((v, i) => {
+      const h = Math.max(2, Math.round((v / max) * 100));
+      const delay = i * 8;
+      return `<div class="chart-bar" title="Week ${i + 1}: ${v} commits" style="height:${h}%;animation-delay:${delay}ms"></div>`;
+    })
+    .join("");
+  const total = totals.reduce((a, b) => a + b, 0);
+  note.textContent = `${totals.length} weeks • ${fmtNumber(total)} commits total • peak ${max}/wk (week ${peak + 1})`;
+};
 
+const renderBreakdown = (breakdown) => {
+  const el = $("breakdown-list");
+  if (!breakdown || breakdown.length === 0) {
+    el.innerHTML = "";
+    return;
+  }
+  const maxContribution = Math.max(...breakdown.map((b) => b.weight * 100));
+  el.innerHTML = breakdown
+    .map((row) => {
+      const pct = Math.round((row.raw || 0) * 100);
+      const widthPct = Math.max(2, Math.min(100, (row.contribution / maxContribution) * 100));
       return `
-        <div class="watch-card">
-          <div class="watch-title">${item.repo}</div>
-          <div class="compare-score">${score}</div>
-          <div class="watch-meta">Maturity: ${item.maturity || "—"}\nLast updated: ${item.updated || "—"}</div>
-          <div class="watch-spark">${spark || ""}</div>
+        <div class="bd-row">
+          <div class="bd-label" title="${escapeHtml(row.label)} — weight ${(row.weight * 100).toFixed(0)}%">${escapeHtml(row.label)}</div>
+          <div class="bd-track"><div class="bd-fill" style="width:${widthPct}%"></div></div>
+          <div class="bd-value">${pct}%</div>
+        </div>
+      `;
+    })
+    .join("");
+  requestAnimationFrame(() => {
+    el.querySelectorAll(".bd-fill").forEach((n) => {
+      // trigger transition by re-reading the inline style
+      const w = n.style.width;
+      n.style.width = "0%";
+      requestAnimationFrame(() => (n.style.width = w));
+    });
+  });
+};
+
+const renderCategories = (cats) => {
+  const el = $("category-list");
+  if (!cats || cats.length === 0) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = cats
+    .map((c) => {
+      const pct = Math.min(100, Math.max(0, c.percent || 0));
+      return `
+        <div class="cat-chip">
+          <div class="cat-name">${escapeHtml(c.category)}</div>
+          <div class="cat-value">${Math.round(c.contribution)} / ${Math.round(c.max)}</div>
+          <div class="cat-bar"><span style="width:${pct}%"></span></div>
         </div>
       `;
     })
     .join("");
 };
 
-const setRiskTheme = (riskLevel) => {
-  const root = document.documentElement;
-  let color = "#d9a441";
-  if (riskLevel === "Low") color = "#1f7a5a";
-  if (riskLevel === "High") color = "#a53d2a";
-  root.style.setProperty("--risk-color", color);
-  root.style.setProperty(
-    "--risk-glow",
-    riskLevel === "Low"
-      ? "rgba(31, 122, 90, 0.18)"
-      : riskLevel === "High"
-      ? "rgba(165, 61, 42, 0.2)"
-      : "rgba(217, 164, 65, 0.18)"
-  );
-
-  document.body.classList.remove("risk-low", "risk-medium", "risk-high");
-  if (riskLevel === "Low") document.body.classList.add("risk-low");
-  if (riskLevel === "Medium") document.body.classList.add("risk-medium");
-  if (riskLevel === "High") document.body.classList.add("risk-high");
-};
-
-const setMeter = (value, riskLevel) => {
-  const percent = clampTo99(value);
-  const degrees = Math.round((percent / 99) * 360);
-
-  meterValue.textContent = `${percent}%`;
-  meterLabel.textContent = riskLevel ? `${riskLevel} risk` : "Trust Meter";
-
-  setRiskTheme(riskLevel);
-  const color = getComputedStyle(document.documentElement).getPropertyValue("--risk-color") || "#d9a441";
-  meterRing.style.background = `conic-gradient(${color} 0deg, ${color} ${degrees}deg, #f1ece6 ${degrees}deg)`;
-};
-
-const renderSignals = (data) => {
-  const features = data.features || {};
-  const metadata = data.metadata || {};
-
-  return `Commits: ${features.commit_score ?? "-"} | Contributors: ${features.contributor_score ?? "-"} | Issues: ${features.issue_score ?? "-"}\nStars: ${metadata.stars ?? "-"} | Forks: ${metadata.forks ?? "-"}`;
-};
-
-const fetchAnalysis = async (repoUrl) => {
-  const response = await fetch(`/analyze?repo_url=${encodeURIComponent(repoUrl)}`, {
-    method: "POST"
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Analysis failed");
+const renderContributors = (list) => {
+  const el = $("contributors-list");
+  if (!list || list.length === 0) {
+    el.innerHTML = '<div class="bullets"><li class="empty">No contributor data available.</li></div>';
+    return;
   }
-
-  return response.json();
+  el.innerHTML = list
+    .map((c) => {
+      const img = c.avatar_url
+        ? `<img class="contrib-avatar" src="${escapeAttr(c.avatar_url)}" alt="" loading="lazy" />`
+        : `<div class="contrib-avatar"></div>`;
+      const href = c.html_url ? escapeAttr(c.html_url) : "#";
+      return `
+        <a class="contrib-row" href="${href}" target="_blank" rel="noreferrer">
+          ${img}
+          <div class="contrib-name">${escapeHtml(c.login)}</div>
+          <div class="contrib-count">${fmtNumber(c.contributions)} commits</div>
+        </a>
+      `;
+    })
+    .join("");
 };
 
-const renderCompareCard = (data, rankLabel) => {
-  const score = data.rule_based_analysis?.trust_score ?? 0;
-  const risk = data.rule_based_analysis?.risk_level || "Unknown";
-  const percent = clampTo99(score);
-  const metadata = data.metadata || {};
+const renderCompare = (reports, errors) => {
+  if (!reports || reports.length === 0) {
+    compareSection.classList.add("hidden");
+    return;
+  }
+  compareSection.classList.remove("hidden");
 
-  return `
-    <div class="compare-card">
-      <div class="compare-badge">${rankLabel}</div>
-      <div class="compare-repo">${data.repository || "—"}</div>
-      <div class="compare-score">${percent}%</div>
-      <div class="compare-risk">${risk} risk</div>
-      <div class="compare-stats">
-        <span>Stars ${metadata.stars ?? "-"}</span>
-        <span>Forks ${metadata.forks ?? "-"}</span>
-        <span>Contrib ${metadata.contributors ?? "-"}</span>
-      </div>
-      <div class="compare-metrics">${renderSignals(data)}</div>
-    </div>
+  const cardsEl = $("compare-cards");
+  cardsEl.innerHTML = reports
+    .map((data, idx) => {
+      const risk = data.risk_level || "Unknown";
+      const rankClass = idx === 0 ? "rank-1" : idx === reports.length - 1 ? "rank-last" : "";
+      const rank = idx === 0 ? "Best" : idx === reports.length - 1 && reports.length > 1 ? "Worst" : `#${idx + 1}`;
+      return `
+        <div class="compare-card ${rankClass}">
+          <div class="compare-rank">${rank}</div>
+          <div class="repo">${escapeHtml(data.repository)}</div>
+          <div class="score">${Math.round(data.score)}</div>
+          <div class="status">${escapeHtml(data.status)} • ${escapeHtml(risk)} risk</div>
+          <div class="stats">
+            <span>★ ${fmtNumber(data.metadata?.stars)}</span>
+            <span>⑂ ${fmtNumber(data.metadata?.forks)}</span>
+            <span>👥 ${fmtNumber(data.metadata?.contributors)}</span>
+            <span>Δ ${fmtNumber(data.activity?.commits_last_90_days)}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const tableEl = $("compare-table");
+  tableEl.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Repository</th>
+          <th>Score</th>
+          <th>Status</th>
+          <th>Stars</th>
+          <th>Forks</th>
+          <th>Contrib</th>
+          <th>Commits 90d</th>
+          <th>Close rate</th>
+          <th>Merge rate</th>
+          <th>Last push</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${reports
+          .map((d) => {
+            const m = d.metadata || {};
+            const a = d.activity || {};
+            return `
+              <tr>
+                <td class="repo-cell">${escapeHtml(d.repository)}</td>
+                <td class="score-cell">${Math.round(d.score)}</td>
+                <td>${escapeHtml(d.status)}</td>
+                <td>${fmtNumber(m.stars)}</td>
+                <td>${fmtNumber(m.forks)}</td>
+                <td>${fmtNumber(m.contributors)}</td>
+                <td>${fmtNumber(a.commits_last_90_days)}</td>
+                <td>${fmtPercent(a.issue_close_rate)}</td>
+                <td>${fmtPercent(a.pr_merge_rate)}</td>
+                <td>${fmtDaysAgo(m.days_since_push)}</td>
+              </tr>
+            `;
+          })
+          .join("")}
+      </tbody>
+    </table>
   `;
-};
 
-const parseRepoFromUrl = (url) => {
-  try {
-    const parts = url.replace(/\/+$/, "").split("/");
-    const repo = parts.pop();
-    const owner = parts.pop();
-    if (!owner || !repo) return null;
-    return `${owner}/${repo}`;
-  } catch {
-    return null;
+  if (errors && errors.length > 0) {
+    const msg = errors.map((e) => `${e.repo_url}: ${e.error}`).join("\n");
+    showToast(`Some repos failed: ${msg}`);
   }
 };
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const repoUrl = repoInput.value.trim();
-  const compareUrlsRaw = compareInput.value.trim();
-  const compareUrls = compareUrlsRaw
-    ? compareUrlsRaw.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 3)
-    : [];
+const escapeHtml = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
-  if (!repoUrl && compareUrls.length === 0) {
-    statusEl.textContent = "Enter a primary URL or up to 3 compare URLs.";
+const escapeAttr = (s) => String(s ?? "").replace(/"/g, "&quot;");
+
+const handleSubmit = async (event) => {
+  event.preventDefault();
+  const primary = parseRepoInput(repoInput.value);
+  const compareUrls = parseCompareList(compareInput.value);
+
+  if (!primary && compareUrls.length === 0) {
+    formStatus.textContent = "Enter a repository URL or owner/repo.";
+    formStatus.classList.add("error");
     return;
   }
 
-  statusEl.textContent = "Analyzing...";
-  recommendation.textContent = "—";
-  warnings.textContent = "—";
-  signals.textContent = "—";
-  compareGrid.innerHTML = "";
-  compareTable.innerHTML = "";
-  weightsEl.textContent = "—";
-  thresholdsEl.textContent = "—";
-  contributionsEl.textContent = "—";
-  timelineBars.innerHTML = "";
-  timelineNote.textContent = "—";
-  summaryDecision.textContent = "—";
-  summaryRisk.textContent = "—";
-  summaryRisk.className = "summary-risk";
-  summaryMeta.textContent = "—";
-  summaryHighlights.textContent = "—";
-  summaryRisks.textContent = "—";
-  dashStars.textContent = "—";
-  dashForks.textContent = "—";
-  dashContrib.textContent = "—";
-  dashIssues.textContent = "—";
-  dashCommits.textContent = "—";
-  dashCloseRate.textContent = "—";
-  dashIssuesBar.style.width = "0%";
-  dashCommitsSpark.innerHTML = "";
-  dashSecurity.textContent = "—";
-  dashLicense.textContent = "License: —";
-  compareSection.classList.add("is-hidden");
-  summaryBoard.classList.add("is-hidden");
-  dashboardSection.classList.add("is-hidden");
-  timelineSection.classList.add("is-hidden");
-  explainSection.classList.add("is-hidden");
-  compareTableSection.classList.add("is-hidden");
-  watchlistSection.classList.add("is-hidden");
+  formStatus.classList.remove("error");
+  setLoading(true);
+  formStatus.textContent = "Contacting GitHub…";
 
   try {
-    const allUrls = [repoUrl, ...compareUrls].filter(Boolean);
-    const uniqueUrls = [...new Set(allUrls)];
-    const results = await Promise.all(uniqueUrls.map(fetchAnalysis));
-    const resultMap = new Map(results.map((item) => [item.repository, item]));
-    const resolveResult = (url) => {
-      const repoKey = parseRepoFromUrl(url);
-      return resultMap.get(repoKey) || results[0];
-    };
+    const urls = [primary, ...compareUrls].filter(Boolean);
+    const unique = [...new Set(urls)];
 
-    if (allUrls.length > 0) {
-      const dataList = allUrls.map((url) => resolveResult(url));
-      const ranked = dataList
-        .map((data) => ({
-          data,
-          score: clampTo99(data.rule_based_analysis?.trust_score ?? 0)
-        }))
-        .sort((a, b) => b.score - a.score);
+    const results = await Promise.allSettled(unique.map(fetchAnalysis));
+    const successes = results
+      .map((r, i) => ({ r, url: unique[i] }))
+      .filter(({ r }) => r.status === "fulfilled")
+      .map(({ r }) => r.value);
+    const failures = results
+      .map((r, i) => ({ r, url: unique[i] }))
+      .filter(({ r }) => r.status === "rejected")
+      .map(({ r, url }) => ({ repo_url: url, error: (r.reason && r.reason.message) || "Failed" }));
 
-      const best = ranked[0]?.data;
-      if (best) {
-        const data = best;
-      const score = data.rule_based_analysis?.trust_score ?? 0;
-      const risk = data.rule_based_analysis?.risk_level || "Unknown";
-      const metadata = data.metadata || {};
-      const activity = data.activity || {};
-      const security = data.security || {};
-
-      setMeter(score, risk);
-      repoName.textContent = data.repository || "—";
-      recommendation.textContent = data.recommendation || "—";
-      signals.textContent = renderSignals(data);
-      warnings.textContent = data.warnings ? data.warnings.join(" | ") : "None";
-      dashStars.textContent = metadata.stars ?? "—";
-      dashForks.textContent = metadata.forks ?? "—";
-      dashContrib.textContent = metadata.contributors ?? "—";
-      dashIssues.textContent = metadata.open_issues ?? "—";
-      dashCommits.textContent = activity.commits_last_90_days ?? "—";
-      dashCloseRate.textContent = formatPercent(activity.issue_close_rate);
-      const issueCap = 500;
-      const issueWidth = Math.min(100, Math.round(((metadata.open_issues || 0) / issueCap) * 100));
-      dashIssuesBar.style.width = `${issueWidth}%`;
-
-      const securityBadges = [
-        security.security_policy ? "Security Policy" : null,
-        security.dependabot ? "Dependabot" : null,
-        security.code_scanning ? "Code Scanning" : null
-      ].filter(Boolean);
-      dashSecurity.textContent = securityBadges.length ? securityBadges.join(" • ") : "No security signals detected";
-      const licenseInfo = security.license || {};
-      const spdx = licenseInfo.spdx_id || licenseInfo.key || "Unknown";
-      const osi = security.license_osi_approved ? "OSI-approved" : "Not OSI-approved";
-      dashLicense.textContent = `License: ${spdx} • ${osi}`;
-
-      const decisionText =
-        risk === "Low"
-          ? "Safe to adopt"
-          : risk === "Medium"
-          ? "Adopt with monitoring"
-          : "Use with caution";
-      summaryDecision.textContent = decisionText;
-      summaryRisk.textContent = `${risk} risk`;
-      summaryRisk.className = `summary-risk ${risk.toLowerCase()}`;
-      summaryMeta.textContent = `Trust score: ${clampTo99(score)}%\nRepo: ${data.repository || "—"}`;
-      summaryMeta.textContent += `\nMaturity: ${data.maturity || "—"}`;
-
-      const highlightItems = [
-        metadata.stars >= 1000 ? "Strong community adoption (1k+ stars)" : null,
-        metadata.forks >= 200 ? "Healthy fork activity (200+ forks)" : null,
-        (activity.commits_last_90_days || 0) >= 50 ? "Active development in last 90 days" : null,
-        (activity.issue_close_rate || 0) >= 0.6 ? "Solid issue responsiveness" : null
-      ];
-
-      const riskItems = [
-        (activity.commits_last_90_days || 0) < 10 ? "Low recent commit activity" : null,
-        (activity.issue_close_rate || 0) < 0.4 ? "Slow issue closure" : null,
-        metadata.open_issues >= 200 ? "Large open issue backlog" : null,
-        metadata.contributors <= 2 ? "Low contributor diversity" : null,
-        data.warnings && data.warnings.length ? data.warnings.join(" | ") : null
-      ];
-
-      summaryHighlights.textContent = joinLines(highlightItems) || "No major positives detected.";
-      summaryRisks.textContent = joinLines(riskItems) || "No major risks detected.";
-
-      const explanation = data.explanation || {};
-      const weights = explanation.weights || {};
-      const thresholds = explanation.thresholds || {};
-      const contributions = explanation.contributions || {};
-
-      weightsEl.textContent = `Commits: ${weights.commit_score ?? "-"}\nIssues: ${weights.issue_score ?? "-"}\nContributors: ${weights.contributor_score ?? "-"}\nStars: ${weights.star_score ?? "-"}\nForks: ${weights.fork_score ?? "-"}`;
-      thresholdsEl.textContent = `Low risk: ${thresholds.low_risk_min ?? "-"}+\nMedium risk: ${thresholds.medium_risk_min ?? "-"}+\nHigh risk: below ${thresholds.medium_risk_min ?? "-"}`;
-      contributionsEl.textContent = `Commits: ${contributions.commit ?? "-"}\nIssues: ${contributions.issues ?? "-"}\nContributors: ${contributions.contributors ?? "-"}\nStars: ${contributions.stars ?? "-"}\nForks: ${contributions.forks ?? "-"}`;
-
-      const weekly = data.timeline?.weekly_commits;
-      if (Array.isArray(weekly) && weekly.length > 0) {
-        const lastWeeks = weekly.slice(-52);
-        const totals = lastWeeks.map((item) => item.total || 0);
-        const max = Math.max(...totals, 1);
-        timelineBars.innerHTML = totals
-          .map((value) => {
-            const height = Math.round((value / max) * 100);
-            return `<div class="timeline-bar" style="height:${height}%;"></div>`;
-          })
-          .join("");
-        timelineNote.textContent = `Showing ${lastWeeks.length} weeks. Peak weekly commits: ${max}.`;
-
-        const sparkWeeks = lastWeeks.slice(-20);
-        dashCommitsSpark.innerHTML = sparkWeeks
-          .map((item) => {
-            const height = Math.max(8, Math.round(((item.total || 0) / max) * 100));
-            return `<div class="spark-bar" style="height:${height}%;"></div>`;
-          })
-          .join("");
-      } else {
-        timelineNote.textContent = "Timeline not available yet. Try again in a minute.";
-        dashCommitsSpark.innerHTML = "";
-      }
-      }
+    if (successes.length === 0) {
+      const first = failures[0]?.error || "All analyses failed.";
+      throw new Error(first);
     }
 
-    if (allUrls.length > 0) {
-      const dataList = allUrls.map((url) => resolveResult(url));
-      const ranked = dataList
-        .map((data) => ({
-          data,
-          score: clampTo99(data.rule_based_analysis?.trust_score ?? 0)
-        }))
-        .sort((a, b) => b.score - a.score);
-      const labels =
-        ranked.length === 1
-          ? ["Best"]
-          : ranked.length === 2
-          ? ["Best", "Worst"]
-          : ["Best", "Mid", "Worst"];
-
-      compareGrid.innerHTML = ranked
-        .map((item, idx) => renderCompareCard(item.data, labels[idx] || ""))
-        .join("");
-
-      compareTable.innerHTML = [
-        `<div class="compare-row header">
-          <div>Repo</div>
-          <div>Score</div>
-          <div class="col-hide">Stars</div>
-          <div class="col-hide">Forks</div>
-          <div class="col-hide">Contrib</div>
-          <div class="col-hide">Issues</div>
-          <div class="col-hide">Commits</div>
-        </div>`,
-        ...ranked.map(({ data }) => {
-          const metadata = data.metadata || {};
-          const activity = data.activity || {};
-          const score = clampTo99(data.rule_based_analysis?.trust_score ?? 0);
-          return `<div class="compare-row">
-            <div>${data.repository || "—"}</div>
-            <div>${score}%</div>
-            <div class="col-hide">${metadata.stars ?? "-"}</div>
-            <div class="col-hide">${metadata.forks ?? "-"}</div>
-            <div class="col-hide">${metadata.contributors ?? "-"}</div>
-            <div class="col-hide">${metadata.open_issues ?? "-"}</div>
-            <div class="col-hide">${activity.commits_last_90_days ?? "-"}</div>
-          </div>`;
-        })
-      ].join("");
-
-      compareSection.classList.remove("is-hidden");
-      summaryBoard.classList.remove("is-hidden");
-      dashboardSection.classList.remove("is-hidden");
-      timelineSection.classList.remove("is-hidden");
-      explainSection.classList.remove("is-hidden");
-      compareTableSection.classList.remove("is-hidden");
-      watchlistSection.classList.remove("is-hidden");
-
-      ranked.forEach(({ data, score }) => {
-        if (data.repository) updateHistory(data.repository, score);
-      });
-      renderWatchlist();
+    if (primary) {
+      const primaryKey = normalizeRepoKey(primary);
+      const byKey = new Map(successes.map((s) => [s.repository.toLowerCase(), s]));
+      const resolved = byKey.get(primaryKey) || successes[0];
+      renderSingle(resolved);
+    } else {
+      report.classList.add("hidden");
     }
 
-    statusEl.textContent = "Done.";
+    if (successes.length > 1 || (primary && compareUrls.length > 0)) {
+      renderCompare(successes.slice().sort((a, b) => b.score - a.score), failures);
+    } else {
+      compareSection.classList.add("hidden");
+    }
+
+    formStatus.textContent = `Analyzed ${successes.length} repository${successes.length === 1 ? "" : "ies"}.`;
+    if (failures.length) {
+      const first = failures[0];
+      showToast(`${failures.length} repo failed: ${first.repo_url} — ${first.error}`);
+    }
   } catch (err) {
-    statusEl.textContent = err.message;
-    setMeter(0, "High");
-    repoName.textContent = "—";
-  }
-});
-
-setMeter(0, "");
-
-shareReport?.addEventListener("click", async () => {
-  const repo = repoName.textContent?.trim();
-  if (!repo || repo === "—") return;
-  const url = `${window.location.origin}/report/${repo}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    shareReport.textContent = "Copied";
-  } catch {
-    shareReport.textContent = "Copy failed";
-  }
-  setTimeout(() => {
-    shareReport.textContent = "Share Report";
-  }, 1400);
-});
-
-watchlistSave?.addEventListener("click", () => {
-  const repo = repoName.textContent?.trim();
-  if (!repo || repo === "—") return;
-  const list = getWatchlist();
-  if (!list.find((item) => item.repo === repo)) {
-    const maturity = summaryMeta.textContent?.includes("Maturity:")
-      ? summaryMeta.textContent.split("Maturity:")[1]?.trim()
-      : "—";
-    list.push({ repo, maturity, updated: new Date().toLocaleString() });
-    setWatchlist(list);
-  }
-  renderWatchlist();
-});
-
-watchlistRefresh?.addEventListener("click", async () => {
-  const list = getWatchlist();
-  if (!list.length) return;
-  watchlistRefresh.textContent = "Refreshing...";
-  try {
-    const results = await Promise.all(list.map((item) => fetchAnalysis(`https://github.com/${item.repo}`)));
-    const now = new Date().toLocaleString();
-    const updatedList = list.map((item, idx) => ({
-      ...item,
-      maturity: results[idx]?.maturity || item.maturity,
-      updated: now
-    }));
-    setWatchlist(updatedList);
-    results.forEach((data) => {
-      const score = clampTo99(data.rule_based_analysis?.trust_score ?? 0);
-      updateHistory(data.repository, score);
-    });
-  } catch {
-    // ignore refresh errors
+    formStatus.textContent = err.message || "Something went wrong.";
+    formStatus.classList.add("error");
+    showToast(err.message || "Analysis failed.");
   } finally {
-    watchlistRefresh.textContent = "Refresh All";
-    renderWatchlist();
+    setLoading(false);
   }
-});
-
-const bootReport = () => {
-  const path = window.location.pathname;
-  if (!path.startsWith("/report/")) return;
-  const parts = path.replace("/report/", "").split("/");
-  if (parts.length < 2) return;
-  const repo = `${parts[0]}/${parts[1]}`;
-  repoInput.value = `https://github.com/${repo}`;
-  form.dispatchEvent(new Event("submit", { cancelable: true }));
 };
 
-bootReport();
-renderWatchlist();
+const normalizeRepoKey = (input) => {
+  const match = input.match(/github\.com[\/:]+([\w.\-]+)\/([\w.\-]+?)(?:\.git)?\/?$/i);
+  if (match) return `${match[1]}/${match[2]}`.toLowerCase();
+  if (/^[\w.\-]+\/[\w.\-]+$/.test(input)) return input.toLowerCase();
+  return input.toLowerCase();
+};
 
-const revealObserver = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("is-visible");
-      }
-    });
-  },
-  { threshold: 0.15 }
-);
+form.addEventListener("submit", handleSubmit);
 
-document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
-
-window.addEventListener("mousemove", (event) => {
-  if (!grid) return;
-  const { innerWidth, innerHeight } = window;
-  const x = (event.clientX / innerWidth - 0.5) * 8;
-  const y = (event.clientY / innerHeight - 0.5) * 8;
-  grid.style.transform = `translate(${x}px, ${y}px)`;
+document.querySelectorAll(".chip[data-example]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    repoInput.value = chip.getAttribute("data-example");
+    repoInput.focus();
+  });
 });
+
+repoInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+const updateRateLimit = async () => {
+  try {
+    const res = await fetch("/api/rate-limit");
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = $("rate-text");
+    const dot = document.querySelector(".nav-link.ghost .dot");
+    if (!el || !dot) return;
+    el.textContent = `API ${data.remaining}`;
+    const color =
+      data.status === "healthy" ? "var(--good)" : data.status === "warning" ? "var(--warn)" : "var(--bad)";
+    dot.style.background = color;
+    dot.style.boxShadow = `0 0 8px ${color}`;
+  } catch {
+    // ignore
+  }
+};
+
+updateRateLimit();
+
+const ring = $("ring-fg");
+if (ring) {
+  ring.setAttribute("stroke-dasharray", String(RING_CIRC));
+  ring.setAttribute("stroke-dashoffset", String(RING_CIRC));
+}

@@ -1,15 +1,24 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "app/main.py",
-      "use": "@vercel/python"
+  "buildCommand": "pip install -r requirements.txt",
+  "installCommand": "pip install -r requirements.txt",
+  "outputDirectory": "web/static",
+  "env": {
+    "GITHUB_TOKEN": "@github_token"
+  },
+  "functions": {
+    "app/main.py": {
+      "memory": 1024,
+      "maxDuration": 30
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "app/main.py"
+      "source": "/api/(.*)",
+      "destination": "/app/main.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/app/main.py"
     }
   ]
 }
