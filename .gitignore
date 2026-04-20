@@ -22,17 +22,32 @@ node_modules/
 
 # macOS junk
 .DS_Store
+.DS_Store?
+*.___pycache___
+.AppleDouble
+.LSOverride
 
 # IDEs
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS / misc
 Thumbs.db
+server.log
 
-# Logs
-*.log
-server.log.env
-.env
-env
-.env
+# Development
+.claude/
+Advanced machine learning /
+*.ipynb_checkpoints
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build
+dist/
+build/
+*.egg-info/
+
