@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-soufastapi
-=======
->>>>>>> 0eeb150 (fix: replace invalid dependency soufastapi with fastapi)
 fastapi
 uvicorn
 requests
