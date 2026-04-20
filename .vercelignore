@@ -1,0 +1,16 @@
+# Don't ignore these directories - they're needed for deployment
+!web/
+!web/static/
+!web/static/**/*
+
+# Ignore development files
+.env
+.DS_Store
+.git
+.venv
+venv/
+__pycache__
+*.pyc
+node_modules/
+Advanced machine learning /
+.claude/
