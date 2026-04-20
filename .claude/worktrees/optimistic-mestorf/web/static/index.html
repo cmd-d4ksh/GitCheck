@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitCheck</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body>
+    <div class="bg-orbit"></div>
+    <div class="bg-grid"></div>
+
+    <header class="topbar">
+      <div class="brand">GitCheck</div>
+      <div class="tagline">Trust and reliability scoring for open-source repositories.</div>
+    </header>
+
+    <main class="container">
+      <section class="hero">
+        <div class="hero-text">
+          <h1>Know the health of a GitHub repo before you ship it.</h1>
+          <p>
+            GitCheck analyzes real GitHub activity and produces a clear trust score. No noise. Just a
+            fast, data-driven signal.
+          </p>
+        </div>
+        <div class="hero-card">
+          <form id="analyze-form" class="form">
+            <label for="repo-url">Repository URL</label>
+            <div class="input-row">
+              <input
+                id="repo-url"
+                type="url"
+                placeholder="https://github.com/owner/repo"
+                required
+                autocomplete="off"
+              />
+              <button type="submit">Analyze</button>
+            </div>
+            <label for="repo-compare">Compare Mode (up to 3 URLs)</label>
+            <textarea
+              id="repo-compare"
+              placeholder="https://github.com/owner/repo\nhttps://github.com/owner/repo2\nhttps://github.com/owner/repo3"
+              rows="3"
+            ></textarea>
+            <div id="form-status" class="form-status">Ready.</div>
+          </form>
+        </div>
+      </section>
+
+      <section class="results" id="results" aria-live="polite">
+        <div class="meter">
+          <div class="meter-ring">
+            <div class="meter-inner">
+              <div class="meter-value" id="meter-value">--</div>
+              <div class="meter-label" id="meter-label">Trust Meter</div>
+            </div>
+          </div>
+          <div class="meter-footnote">Scale: 0–99%</div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-card">
+            <div class="summary-title">Repository</div>
+            <div class="summary-value" id="repo-name">—</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Recommendation</div>
+            <div class="summary-value" id="recommendation">—</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Signals</div>
+            <div class="summary-value" id="signals">—</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-title">Warnings</div>
+            <div class="summary-value" id="warnings">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="summary-board" id="summary-board">
+        <div class="compare-header">
+          <div class="compare-title">Executive Summary</div>
+          <div class="compare-subtitle">A concise readout for quick decisions.</div>
+        </div>
+        <div class="summary-board-grid">
+          <div class="summary-panel">
+            <div class="summary-panel-title">Decision</div>
+            <div class="summary-decision" id="summary-decision">—</div>
+            <div class="summary-risk" id="summary-risk">—</div>
+            <div class="summary-meta" id="summary-meta">—</div>
+          </div>
+          <div class="summary-panel">
+            <div class="summary-panel-title">Highlights</div>
+            <div class="summary-list" id="summary-highlights">—</div>
+          </div>
+          <div class="summary-panel">
+            <div class="summary-panel-title">Risks</div>
+            <div class="summary-list" id="summary-risks">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard" id="dashboard">
+        <div class="compare-header">
+          <div class="compare-title">Dashboard</div>
+          <div class="compare-subtitle">Key health metrics at a glance.</div>
+        </div>
+        <div class="dashboard-grid">
+          <div class="dash-card">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3.2l2.7 5.4 6 0.9-4.4 4.3 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.5l6-0.9L12 3.2z" />
+                </svg>
+              </div>
+              <div class="dash-label">Stars</div>
+            </div>
+            <div class="dash-value" id="dash-stars">—</div>
+            <div class="dash-sub" id="dash-stars-sub">Popularity signal</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 5.5a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0zm7 13a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0zM6 18.5a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0zM8.5 8v7m0 0h7" />
+                </svg>
+              </div>
+              <div class="dash-label">Forks</div>
+            </div>
+            <div class="dash-value" id="dash-forks">—</div>
+            <div class="dash-sub" id="dash-forks-sub">Adoption signal</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M7 10a3 3 0 116 0 3 3 0 01-6 0zm8.5 2.5a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0zM3.5 19a4.5 4.5 0 019 0m2.5 0a4 4 0 018 0" />
+                </svg>
+              </div>
+              <div class="dash-label">Contributors</div>
+            </div>
+            <div class="dash-value" id="dash-contrib">—</div>
+            <div class="dash-sub" id="dash-contrib-sub">Bus factor proxy</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 7.2v5.6m0 4.5h.01M5 4.5h14a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 18V6A1.5 1.5 0 015 4.5z" />
+                </svg>
+              </div>
+              <div class="dash-label">Open Issues</div>
+            </div>
+            <div class="dash-value" id="dash-issues">—</div>
+            <div class="dash-sub" id="dash-issues-sub">Backlog pressure</div>
+            <div class="dash-bar"><span id="dash-issues-bar"></span></div>
+          </div>
+          <div class="dash-card wide">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 16l4-5 4 3 5-7 3 2" />
+                  <path d="M4 20h16" />
+                </svg>
+              </div>
+              <div class="dash-label">Commits (Last 90 Days)</div>
+            </div>
+            <div class="dash-value" id="dash-commits">—</div>
+            <div class="dash-sub" id="dash-commits-sub">Recent activity</div>
+            <div class="dash-sparkline" id="dash-commits-spark"></div>
+          </div>
+          <div class="dash-card wide">
+            <div class="dash-top">
+              <div class="dash-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12l4 4 10-10" />
+                </svg>
+              </div>
+              <div class="dash-label">Issue Close Rate</div>
+            </div>
+            <div class="dash-value" id="dash-close-rate">—</div>
+            <div class="dash-sub" id="dash-close-sub">Responsiveness</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="explain" id="explain">
+        <div class="compare-header">
+          <div class="compare-title">Score Explanation</div>
+          <div class="compare-subtitle">Why the score looks like this.</div>
+        </div>
+        <div class="explain-grid">
+          <div class="explain-card">
+            <div class="explain-title">Weights</div>
+            <div class="explain-value" id="weights">—</div>
+          </div>
+          <div class="explain-card">
+            <div class="explain-title">Thresholds</div>
+            <div class="explain-value" id="thresholds">—</div>
+          </div>
+          <div class="explain-card">
+            <div class="explain-title">Contributions</div>
+            <div class="explain-value" id="contributions">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="timeline" id="timeline">
+        <div class="compare-header">
+          <div class="compare-title">Repo Health Timeline</div>
+          <div class="compare-subtitle">Weekly commits over the last 6–12 months.</div>
+        </div>
+        <div class="timeline-card">
+          <div class="timeline-bars" id="timeline-bars"></div>
+          <div class="timeline-note" id="timeline-note">—</div>
+        </div>
+      </section>
+
+      <section class="compare" id="compare">
+        <div class="compare-header">
+          <div class="compare-title">Comparison</div>
+          <div class="compare-subtitle">Side-by-side trust signals for quick decisions.</div>
+        </div>
+        <div class="compare-grid" id="compare-grid"></div>
+        <div class="compare-table-wrap">
+          <div class="compare-table-title">Comparison Table</div>
+          <div class="compare-table" id="compare-table"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div>GitCheck • Trust scoring powered by GitHub activity data</div>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
