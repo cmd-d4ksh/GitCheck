@@ -1,24 +1,25 @@
 {
   "buildCommand": "pip install -r requirements.txt",
   "installCommand": "pip install -r requirements.txt",
-  "outputDirectory": "web/static",
+  "outputDirectory": ".",
+  "framework": "python",
   "env": {
     "GITHUB_TOKEN": "@github_token"
   },
   "functions": {
-    "app/main.py": {
-      "memory": 1024,
+    "wsgi.py": {
+      "runtime": "python3.11",
       "maxDuration": 30
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/app/main.py"
+      "source": "/static/(.*)",
+      "destination": "/web/static/$1"
     },
     {
       "source": "/(.*)",
-      "destination": "/app/main.py"
+      "destination": "/wsgi.py"
     }
   ]
 }
