@@ -1,116 +1,120 @@
 # GitCheck
 
-GitCheck is a production-oriented trust and reliability scoring system designed to help developers and teams evaluate open-source projects before adopting them.
+GitCheck analyzes public GitHub repositories and scores how safe they look to adopt in production.
 
-It combines real GitHub activity data with a machine-learning–based scoring pipeline to assess project health, maintenance quality, and long-term reliability.
+It combines live GitHub activity signals, feature extraction, and a weighted rule-based scoring system to explain repository health in a way that is easy to review quickly.
 
----
+## Live App
 
-## Overview
+- Production: `https://git-check-jade.vercel.app`
+- Local app: `http://127.0.0.1:8000`
+- Interactive docs: `http://127.0.0.1:8000/docs`
 
-Selecting a dependable open-source dependency is a critical decision in modern software development. Metrics such as stars or forks often fail to reflect whether a project is actively maintained, well-supported, or suitable for production use.
+## What GitCheck Measures
 
-GitCheck addresses this gap by analyzing real contribution and maintenance signals from GitHub repositories and generating a structured trust score that reflects overall project reliability.
+- Recent commit activity
+- Push recency and trend direction
+- Contributor diversity and bus factor
+- Issue closure and PR merge behavior
+- Release cadence
+- License presence
+- Stars and forks as light adoption signals
 
-The system is designed for developers, technical leads, and teams who want data-driven insight when evaluating open-source software.
+## Core Endpoints
 
----
+- `GET /` serves the frontend
+- `GET /api/health` returns service health
+- `GET /api/rate-limit` shows GitHub API budget
+- `GET /api/analyze?repo_url=<owner/repo-or-url>` analyzes one repository
+- `POST /api/analyze` accepts `{ "repo_url": "..." }`
+- `POST /api/compare` compares up to 5 repositories
 
-## Key Features
-
-- **Repository Health Analysis**  
-  Evaluates contribution frequency, contributor activity, issue resolution, and maintenance patterns.
-
-- **Trust Scoring System**  
-  Produces a clear and interpretable reliability score based on multiple weighted signals.
-
-- **Machine Learning Pipeline**  
-  Uses learned patterns from historical repository data to assess project sustainability and risk.
-
-- **Real GitHub Data**  
-  Operates on live and historical GitHub metrics rather than static heuristics.
-
----
-
-## How It Works
-
-GitCheck evaluates repositories using multiple dimensions:
-
-- **Contribution Patterns**  
-  Commit frequency, contributor consistency, and engagement trends.
-
-- **Maintenance Activity**  
-  Issue response times, pull request handling, and update recency.
-
-- **Project Sustainability**  
-  Long-term activity trends, stagnation detection, and maturity indicators.
-
-These signals are processed through an ML-based scoring pipeline to generate a trust score that reflects the overall reliability of a repository.
-
----
-
-## Project Structure
-
-├── app/ # Core backend application
-├── ml/ # Machine learning pipeline and scoring logic
-├── docs/ # Architecture, API, deployment, and testing docs
-├── .github/ # GitHub issue templates and configuration
-├── .env.example # Environment variable template
-├── .gitignore
-├── requirements.txt
-└── README.md
-
-
----
-
-## Installation
+## Quick Start
 
 ### Prerequisites
-- Python 3.9 or higher
-- Virtual environment tool (recommended)
+
+- Python 3.10+
+- A GitHub personal access token for better API limits
 
 ### Setup
 
 ```bash
-git clone https://github.com/cmd-d4ksh/GitCheck
+git clone https://github.com/cmd-d4ksh/GitCheck.git
 cd GitCheck
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-python app/main.py
 ```
 
----
+Add your GitHub token to `.env`:
 
-## Installation
-
-Prerequisites:
-- Python 3.9 or higher
-- Virtual environment tool (recommended)
-
-Setup steps:
-
-git clone https://github.com/cmd-d4ksh/GitCheck
-cd GitCheck
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-
-Create an environment file:
-cp .env.example .env
-
-## Running the Application
 ```bash
-uvicorn app.main:app --reload
-
+GITHUB_TOKEN=your_token_here
 ```
 
-The API will be available at: http://127.0.0.1:8000/docs or http://127.0.0.1:8000/redoc
+### Run Locally
 
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
+Then open:
 
+- `http://127.0.0.1:8000`
+- `http://127.0.0.1:8000/docs`
 
+## Example Requests
 
+Analyze a repository:
 
+```bash
+curl "http://127.0.0.1:8000/api/analyze?repo_url=https://github.com/fastapi/fastapi"
+```
+
+Compare repositories:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/compare" \
+  -H "Content-Type: application/json" \
+  -d '{"repo_urls":["fastapi/fastapi","django/django","pallets/flask"]}'
+```
+
+## Response Highlights
+
+GitCheck returns:
+
+- repository metadata
+- activity metrics
+- normalized features
+- overall score
+- risk level and status
+- category breakdowns
+- highlights, risks, penalties, and recommendation text
+
+## Deployment
+
+GitCheck is deployed on Vercel using:
+
+- `api/index.py` as the Python serverless entrypoint
+- `vercel.json` rewrites to route all app traffic through FastAPI
+- `web/static/` for the frontend assets
+
+See [DEPLOYMENT.md](/Users/dakshshah/Documents/GitHub/GitCheck/DEPLOYMENT.md) and [docs/DEPLOYMENT.md](/Users/dakshshah/Documents/GitHub/GitCheck/docs/DEPLOYMENT.md) for the full flow.
+
+## Project Layout
+
+```text
+app/            FastAPI app, GitHub client, scoring logic
+api/            Vercel Python entrypoint
+web/static/     Frontend HTML, CSS, and JS
+ml/             Bundled training artifacts and legacy model file
+docs/           Supporting documentation
+vercel.json     Vercel routing configuration
+```
+
+## Notes
+
+- The bundled ML model is kept for compatibility, but the primary scoring path is rule-based.
+- Authenticated GitHub requests dramatically improve rate limits.
+- Vercel is currently the production deployment target.

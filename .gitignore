@@ -12,6 +12,7 @@ __pycache__/
 .venv/
 venv/
 env/
+env
 
 # Django
 db.sqlite3
@@ -51,3 +52,4 @@ dist/
 build/
 *.egg-info/
 
+.vercel

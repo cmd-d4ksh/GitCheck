@@ -1,14 +1,5 @@
 {
-  "buildCommand": "pip install -r requirements.txt",
-  "installCommand": "pip install -r requirements.txt",
-  "outputDirectory": ".",
-  "framework": "python",
-  "functions": {
-    "wsgi.py": {
-      "runtime": "python3.11",
-      "maxDuration": 30
-    }
-  },
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
       "source": "/static/(.*)",
@@ -16,7 +7,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/wsgi.py"
+      "destination": "/api/index.py"
     }
   ]
 }

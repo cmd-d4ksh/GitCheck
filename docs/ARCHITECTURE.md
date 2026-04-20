@@ -1,111 +1,82 @@
 # GitCheck Architecture
 
-## System Design
+## High-Level Flow
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    API Layer (FastAPI)                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  /analyze - Main endpoint                        │   │
-│  │  /rate-limit - Rate limit monitoring             │   │
-│  │  /docs - Interactive API documentation           │   │
-│  └──────────────────────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│              GitHub API Client                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Pagination Support (commits, issues, contrib)   │   │
-│  │  Rate Limit Handling                             │   │
-│  │  Timeout Management (10s)                        │   │
-│  │  Error Handling (404, 403, network)              │   │
-│  └──────────────────────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│           Feature Extraction & Scoring                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Commit Score (40% weight)                       │   │
-│  │  Issue Close Rate (30% weight)                   │   │
-│  │  Contributor Count (30% weight)                  │   │
-│  └──────────────────────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│          ML Model & Rule-Based Scoring                   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  ML Prediction (RandomForest)                    │   │
-│  │  Trust Score Calculation (0-100)                 │   │
-│  │  Risk Assessment (Low/Medium/High)               │   │
-│  └──────────────────────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│            Response Generation                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Metadata (stars, forks, contributors)           │   │
-│  │  Features & Scores                               │   │
-│  │  Recommendations                                 │   │
-│  │  Warnings (archived, empty repos)                │   │
-│  └──────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────┘
+```text
+Frontend (web/static)
+        |
+        v
+FastAPI app (app/main.py)
+        |
+        v
+GitHub API client (app/github_api.py)
+        |
+        v
+Feature extraction (app/features.py)
+        |
+        v
+Weighted scoring engine (app/trust_score.py)
+        |
+        v
+Structured report returned to UI/API clients
 ```
 
-## Module Breakdown
+## Main Pieces
 
-### `github_api.py`
-- Handles all GitHub API interactions
-- Implements pagination for commits, issues, contributors
-- Rate limit checking and backoff
-- Timeout handling (10 seconds)
-- Error handling for various HTTP status codes
+### `app/main.py`
 
-### `features.py`
-- Normalizes API metrics
-- Calculates feature scores (0.0-1.0)
-- Implements weighting system
+- serves the frontend
+- exposes `/api/health`, `/api/rate-limit`, `/api/analyze`, and `/api/compare`
+- formats the final analysis report
 
-### `ml_model.py`
-- Loads pre-trained ML model (RandomForest)
-- Generates binary predictions (Reliable/Unreliable)
-- Provides confidence scores
+### `app/github_api.py`
 
-### `trust_score.py`
-- Rule-based scoring algorithm
-- Generates trust score (0-100)
-- Assigns risk levels (Low/Medium/High)
+- parses repository input
+- calls GitHub APIs
+- handles rate limits, pagination, caching, and normalized errors
 
-### `main.py`
-- FastAPI application
-- API endpoints
-- Request validation
-- Response generation
-- Error handling and HTTP status codes
+### `app/features.py`
 
-## Data Flow
+- converts raw GitHub metrics into normalized feature scores
+- models activity, maintenance, popularity, and bus-factor signals
 
-1. User sends repository URL
-2. API validates input
-3. GitHub API client fetches metadata
-4. Features are extracted and normalized
-5. ML model and rule-based scoring run in parallel
-6. Recommendations generated
-7. Response returned with full analysis
+### `app/trust_score.py`
 
-## Configuration
+- applies weighted scoring
+- assigns status and risk level
+- produces highlights, risks, penalties, and recommendation text
 
-- GitHub token: `.env` file
-- Timeout: 10 seconds per request
-- Page limits: 10 pages for commits, 5 for issues/contributors
-- Port: 8000 (default)
+### `app/ml_model.py`
 
-## Dependencies
+- loads the bundled legacy model if needed
+- not part of the primary scoring path today
 
-See `requirements.txt` for complete list:
-- fastapi (web framework)
-- uvicorn (ASGI server)
-- requests (HTTP client)
-- python-dotenv (environment variables)
-- scikit-learn (ML models)
-- pandas (data manipulation)
-- joblib (model serialization)
+### `api/index.py`
+
+- Vercel Python entrypoint
+- imports the FastAPI app for production deployment
+
+## Deployment Shape
+
+```text
+Browser
+  -> Vercel
+  -> vercel.json rewrite
+  -> api/index.py
+  -> FastAPI app
+  -> GitHub API
+```
+
+Static frontend assets are served from `web/static/`.
+
+## Scoring Model
+
+GitCheck emphasizes:
+
+- activity
+- community resilience
+- maintainer responsiveness
+- project hygiene
+- lightweight adoption signals
+
+The final output includes both a total score and an explanation of why that score was assigned.

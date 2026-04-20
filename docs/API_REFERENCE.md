@@ -1,163 +1,135 @@
 # API Reference
 
-## Base URL
+## Base URLs
 
-```
-http://localhost:8000
-```
-
-## Authentication
-
-All requests require a valid GitHub token in the `.env` file.
+- Local: `http://127.0.0.1:8000`
+- Production: `https://git-check-jade.vercel.app`
 
 ## Endpoints
 
-### 1. Health Check
+### `GET /`
 
-**GET** `/`
+Returns the frontend HTML application.
 
-Check if the API is running.
+### `GET /api/health`
 
-**Response:**
+Basic health check.
+
+Example response:
+
 ```json
 {
-  "status": "GitCheck API is running"
+  "status": "ok"
 }
 ```
 
-**Status Code:** 200
+### `GET /api/rate-limit`
 
----
+Returns the current GitHub API budget.
 
-### 2. Analyze Repository
+Example response:
 
-**POST** `/analyze`
-
-Analyze a GitHub repository and return trust score.
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| repo_url | string | Yes | Full GitHub repository URL |
-
-**Example Request:**
-```bash
-POST /analyze?repo_url=https://github.com/python/cpython
-```
-
-**Response:**
 ```json
 {
-  "repository": "python/cpython",
-  "metadata": {
-    "stars": 71386,
-    "forks": 34031,
-    "open_issues": 9206,
-    "contributors": 354,
-    "archived": false
-  },
-  "features": {
-    "commit_score": 1.0,
-    "contributor_score": 1.0,
-    "issue_score": 0.14
-  },
-  "ml_analysis": {
-    "prediction": "Reliable",
-    "confidence": 0.72
-  },
-  "rule_based_analysis": {
-    "trust_score": 74,
-    "risk_level": "Medium"
-  },
-  "warnings": null,
-  "recommendation": "🟡 Generally safe, but monitor for updates. Some metrics are concerning."
-}
-```
-
-**Status Codes:**
-- 200: Success
-- 400: Invalid request/repository
-- 403: Repository is private
-- 404: Repository not found
-- 504: Request timeout
-
----
-
-### 3. Rate Limit Status
-
-**GET** `/rate-limit`
-
-Check GitHub API rate limit status.
-
-**Response:**
-```json
-{
-  "remaining": 4500,
-  "reset_time": 1707302400,
+  "remaining": 4921,
+  "reset_at": 1770000000,
   "status": "healthy"
 }
 ```
 
-**Status Values:**
-- "healthy" - More than 100 requests remaining
-- "warning" - 10-100 requests remaining
-- "critical" - Less than 10 requests remaining
+### `GET /api/analyze`
 
-**Status Code:** 200
+Query parameter:
 
----
+- `repo_url`: full GitHub URL or `owner/repo`
 
-## Response Fields
+Example:
 
-### Metadata Object
-| Field | Type | Description |
-|-------|------|-------------|
-| stars | int | Number of GitHub stars |
-| forks | int | Number of forks |
-| open_issues | int | Number of open issues |
-| contributors | int | Number of contributors |
-| archived | bool | Whether repository is archived |
+```bash
+curl "http://127.0.0.1:8000/api/analyze?repo_url=fastapi/fastapi"
+```
 
-### Features Object
-| Field | Type | Range | Description |
-|-------|------|-------|-------------|
-| commit_score | float | 0.0-1.0 | Recent commit activity |
-| contributor_score | float | 0.0-1.0 | Contributor count score |
-| issue_score | float | 0.0-1.0 | Issue resolution rate |
+### `POST /api/analyze`
 
-### ML Analysis Object
-| Field | Type | Values | Description |
-|-------|------|--------|-------------|
-| prediction | string | "Reliable", "Unreliable" | ML model prediction |
-| confidence | float | 0.0-1.0 | Confidence in prediction |
-
-### Rule Based Analysis Object
-| Field | Type | Range | Values | Description |
-|-------|------|-------|--------|-------------|
-| trust_score | int | 0-100 | Score | Overall trust score |
-| risk_level | string | - | "Low", "Medium", "High" | Risk assessment |
-
----
-
-## Error Handling
-
-### 400 Bad Request
+Request body:
 
 ```json
 {
-  "detail": "Invalid repo_url parameter"
+  "repo_url": "https://github.com/fastapi/fastapi"
 }
 ```
 
-### 403 Forbidden
+### `POST /api/compare`
+
+Request body:
 
 ```json
 {
-  "detail": "Cannot analyze private repositories. GitCheck supports public repos only."
+  "repo_urls": [
+    "fastapi/fastapi",
+    "django/django",
+    "pallets/flask"
+  ]
 }
 ```
 
-### 404 Not Found
+Accepts between 1 and 5 repository values.
+
+## Analyze Response Shape
+
+Key fields returned by `/api/analyze`:
+
+```json
+{
+  "repository": "fastapi/fastapi",
+  "url": "https://github.com/fastapi/fastapi",
+  "description": "FastAPI framework, high performance, easy to learn, fast to code, ready for production",
+  "language": "Python",
+  "topics": [],
+  "license": "MIT License",
+  "default_branch": "master",
+  "latest_release": null,
+  "metadata": {
+    "stars": 0,
+    "forks": 0,
+    "watchers": 0,
+    "open_issues": 0,
+    "contributors": 0,
+    "archived": false,
+    "disabled": false,
+    "created_at": null,
+    "updated_at": null,
+    "pushed_at": null,
+    "days_since_push": 0,
+    "age_days": 0
+  },
+  "activity": {
+    "commits_last_90_days": 0,
+    "weekly_commits": [],
+    "issue_close_rate": 0.0,
+    "pr_merge_rate": 0.0,
+    "issues": {},
+    "pull_requests": {},
+    "release_count": 0
+  },
+  "top_contributors": [],
+  "features": {},
+  "score": 0,
+  "risk_level": "Low",
+  "status": "Active",
+  "breakdown": [],
+  "penalties": [],
+  "categories": [],
+  "highlights": [],
+  "risks": [],
+  "recommendation": "Safe to adopt",
+  "warnings": []
+}
+```
+
+## Error Responses
+
+GitCheck returns normalized JSON errors in this shape:
 
 ```json
 {
@@ -165,55 +137,13 @@ Check GitHub API rate limit status.
 }
 ```
 
-### 504 Gateway Timeout
+Common status codes:
 
-```json
-{
-  "detail": "Request timeout. GitHub API is slow. Try again later."
-}
-```
-
----
-
-## Rate Limiting
-
-- Limit: 5,000 requests per hour (with authentication)
-- Check `/rate-limit` before bulk operations
-- Backoff strategy implemented for approaching limits
-
----
-
-## Examples
-
-### Python
-
-```python
-import requests
-
-url = "http://localhost:8000/analyze"
-params = {"repo_url": "https://github.com/django/django"}
-
-response = requests.post(url, params=params)
-data = response.json()
-
-print(f"Trust Score: {data['rule_based_analysis']['trust_score']}")
-print(f"Risk Level: {data['rule_based_analysis']['risk_level']}")
-```
-
-### JavaScript
-
-```javascript
-const repo_url = "https://github.com/nodejs/node";
-const response = await fetch(
-  `http://localhost:8000/analyze?repo_url=${encodeURIComponent(repo_url)}`,
-  { method: 'POST' }
-);
-const data = await response.json();
-console.log(data.rule_based_analysis);
-```
-
-### cURL
-
-```bash
-curl -X POST "http://localhost:8000/analyze?repo_url=https://github.com/facebook/react"
-```
+- `400` invalid repo input
+- `401` invalid GitHub token
+- `403` forbidden or private repo access denied
+- `404` repository not found
+- `409` empty/conflicted repository
+- `429` GitHub rate limit exceeded
+- `502` upstream/network issue
+- `504` GitHub timeout

@@ -1,114 +1,71 @@
 # Deployment Guide
 
-## Local Development
+## Overview
 
-### Prerequisites
-- Python 3.10+
-- GitHub personal access token
-- Virtual environment
+GitCheck runs as a FastAPI app locally and is deployed to Vercel in production.
 
-### Setup
+- Local: `http://127.0.0.1:8000`
+- Production: `https://git-check-jade.vercel.app`
 
-```bash
-# Clone repository
-git clone https://github.com/cmd-d4ksh/GitCheck.git
-cd GitCheck
+## Files That Matter
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+- `app/main.py`: FastAPI application
+- `api/index.py`: Vercel Python entrypoint
+- `vercel.json`: rewrites and deployment routing
+- `web/static/`: frontend files
 
-# Install dependencies
-pip install -r requirements.txt
+## Vercel Requirements
 
-# Configure environment
-cp .env.example .env
-# Edit .env and add your GITHUB_TOKEN
-```
-
-### Running Locally
+### Environment variable
 
 ```bash
-# Start the API server
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-# Server will be available at http://127.0.0.1:8000
-# API docs: http://127.0.0.1:8000/docs
+GITHUB_TOKEN=your_token_here
 ```
 
-## Production Deployment
+Add it to:
 
-### Using Gunicorn
+- Production
+- Preview
+- Development
+
+### CLI flow
 
 ```bash
-# Install gunicorn
-pip install gunicorn
-
-# Run with Gunicorn
-gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+npx vercel whoami
+npx vercel link
+npx vercel env ls
+npx vercel --prod
 ```
 
-### Using Docker
+## Recommended Deploy Workflow
 
-```dockerfile
-FROM python:3.10-slim
+1. Verify the app locally with `uvicorn`.
+2. Confirm `.env` works locally.
+3. Ensure the Vercel project is linked.
+4. Confirm `GITHUB_TOKEN` is set in Vercel.
+5. Run `npx vercel --prod`.
+6. Test `/` and `/api/health` on the production URL.
 
-WORKDIR /app
+## Troubleshooting
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+### Build fails on Python function discovery
 
-COPY . .
+Make sure the Vercel entrypoint exists at:
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```text
+api/index.py
 ```
 
-```bash
-# Build and run
-docker build -t gitcheck .
-docker run -p 8000:8000 --env-file .env gitcheck
-```
+### Frontend loads but API fails
 
-### Using Supervisor (for continuous uptime)
+Check:
 
-```ini
-[program:gitcheck]
-command=/path/to/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-directory=/path/to/GitCheck
-user=www-data
-autostart=true
-autorestart=true
-redirect_stderr=true
-stdout_logfile=/var/log/gitcheck.log
-```
+- Vercel env vars
+- GitHub token validity
+- production function logs with `npx vercel logs <deployment-url>`
 
-## Environment Variables
+### GitHub rate limit issues
 
-Create `.env` file with:
-
-```
-GITHUB_TOKEN=your_github_personal_access_token_here
-```
-
-## Monitoring
-
-- Check rate limits: `GET /rate-limit`
-- Health check: `GET /`
-- Monitor logs for errors
-- Set up alerts for API failures
-
-## Security Considerations
-
-1. **API Rate Limiting**: Implement rate limiting middleware
-2. **Token Rotation**: Rotate GitHub tokens regularly
-3. **HTTPS**: Always use HTTPS in production
-4. **Logging**: Don't log sensitive information
-5. **Error Messages**: Don't expose internal errors to users
-
-## Scaling
-
-- Use load balancer (nginx, HAProxy)
-- Run multiple uvicorn workers
-- Implement caching layer (Redis)
-- Database for storing analysis results
-- Background job queue for heavy computations
+- verify the token is valid
+- verify it is assigned to the correct Vercel environments
+- redeploy after changing env vars
