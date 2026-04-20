@@ -3,9 +3,6 @@
   "installCommand": "pip install -r requirements.txt",
   "outputDirectory": ".",
   "framework": "python",
-  "env": {
-    "GITHUB_TOKEN": "@github_token"
-  },
   "functions": {
     "wsgi.py": {
       "runtime": "python3.11",
